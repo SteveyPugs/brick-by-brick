@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "Brick by Brick",
+    "slug": "brick-by-brick",
+    "scheme": "brickbybrick",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "plugins": ["expo-router"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.steveypugs.brickbybrick"
+    }
+  }
+}
