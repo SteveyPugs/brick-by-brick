@@ -63,14 +63,21 @@ jobs:
           assert p['Entitlements']['get-task-allow'] is False, 'Development profile rejected'
           assert 'ProvisionedDevices' not in p and not p.get('ProvisionsAllDevices'), 'App Store profile required'
           assert p['ExpirationDate'] > datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None), 'Expired profile'
-          profile_uuid = str(uuid.UUID(p['UUID'])).upper()
+          uuid.UUID(p['UUID'])
+          profile_uuid = p['UUID']
+          assert p['Name'] == 'BrickByBrick App Store', 'Unexpected profile name'
           target = pathlib.Path.home() / 'Library/Developer/Xcode/UserData/Provisioning Profiles' / (profile_uuid + '.mobileprovision')
           target.parent.mkdir(parents=True, exist_ok=True)
           with target.open('xb') as out:
               out.write((root / 'profile.mobileprovision').read_bytes())
+          legacy = pathlib.Path.home() / 'Library/MobileDevice/Provisioning Profiles' / (profile_uuid + '.mobileprovision')
+          legacy.parent.mkdir(parents=True, exist_ok=True)
+          with legacy.open('xb') as out:
+              out.write((root / 'profile.mobileprovision').read_bytes())
           with open(os.environ['GITHUB_ENV'], 'a') as out:
               out.write('PROFILE_UUID=' + profile_uuid + '\n')
               out.write('INSTALLED_PROFILE=' + str(target) + '\n')
+              out.write('LEGACY_PROFILE=' + str(legacy) + '\n')
           PY
           KEYCHAIN_PASSWORD=$(openssl rand -hex 32)
           echo "::add-mask::$KEYCHAIN_PASSWORD"
@@ -92,7 +99,7 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/brick-signed-derived" \
             DEVELOPMENT_TEAM=GJYTR79LS7 CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY='Apple Distribution' \
-            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
+            PROVISIONING_PROFILE_SPECIFIER='BrickByBrick App Store' \
             CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER.$GITHUB_RUN_ATTEMPT"
           APP="$RUNNER_TEMP/BrickByBrick-signed.xcarchive/Products/Applications/BrickByBrick.app"
           codesign --verify --deep --strict --verbose=2 "$APP"
@@ -111,4 +118,7 @@ jobs:
           fi
           if [ -n "${INSTALLED_PROFILE:-}" ]; then
             rm -f "$INSTALLED_PROFILE"
+          fi
+          if [ -n "${LEGACY_PROFILE:-}" ]; then
+            rm -f "$LEGACY_PROFILE"
           fi
