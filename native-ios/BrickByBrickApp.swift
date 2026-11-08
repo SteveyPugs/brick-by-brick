@@ -1,9 +1,33 @@
 import SwiftUI
 
+struct Brick: Identifiable, Codable {
+    let id: UUID
+    let title: String
+    let createdAt: Date
+    var isComplete: Bool = false
+}
+
 struct Wall: Identifiable, Codable {
     let id: UUID
     let title: String
     let createdAt: Date
+    var bricks: [Brick]
+
+    init(id: UUID, title: String, createdAt: Date, bricks: [Brick] = []) {
+        self.id = id
+        self.title = title
+        self.createdAt = createdAt
+        self.bricks = bricks
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, title, createdAt, bricks }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        title = try values.decode(String.self, forKey: .title)
+        createdAt = try values.decode(Date.self, forKey: .createdAt)
+        bricks = values.contains(.bricks) ? try values.decode([Brick].self, forKey: .bricks) : []
+    }
 }
 
 struct Build: Identifiable, Codable {
@@ -86,7 +110,48 @@ final class BuildStore: ObservableObject {
         try persist(updated)
     }
 
+    func createBrick(buildID: UUID, wallID: UUID, title: String) throws {
+        let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty, clean.count <= 80 else { throw SaveError.invalidTitle }
+        try updateWall(buildID: buildID, wallID: wallID) { wall in
+            wall.bricks.append(Brick(id: UUID(), title: clean, createdAt: Date()))
+        }
+    }
+
+    func toggleBrick(buildID: UUID, wallID: UUID, brickID: UUID) throws {
+        try updateWall(buildID: buildID, wallID: wallID) { wall in
+            guard let index = wall.bricks.firstIndex(where: { $0.id == brickID }) else { throw SaveError.unavailable }
+            wall.bricks[index].isComplete.toggle()
+        }
+    }
+
+    func deleteBrick(buildID: UUID, wallID: UUID, brickID: UUID) throws {
+        try updateWall(buildID: buildID, wallID: wallID) { wall in
+            wall.bricks.removeAll { $0.id == brickID }
+        }
+    }
+
+    func deleteWall(buildID: UUID, wallID: UUID) throws {
+        var updated = builds
+        guard let index = updated.firstIndex(where: { $0.id == buildID }) else { throw SaveError.unavailable }
+        updated[index].walls.removeAll { $0.id == wallID }
+        try persist(updated)
+    }
+
+    func deleteBuild(buildID: UUID) throws {
+        try persist(builds.filter { $0.id != buildID })
+    }
+
+    private func updateWall(buildID: UUID, wallID: UUID, change: (inout Wall) throws -> Void) throws {
+        var updated = builds
+        guard let b = updated.firstIndex(where: { $0.id == buildID }),
+              let w = updated[b].walls.firstIndex(where: { $0.id == wallID }) else { throw SaveError.unavailable }
+        try change(&updated[b].walls[w])
+        try persist(updated)
+    }
+
     private func persist(_ updated: [Build]) throws {
+        guard loadError == nil else { throw SaveError.unavailable }
         let data = try JSONEncoder().encode(updated)
         try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(),
                                                 withIntermediateDirectories: true)
@@ -254,6 +319,9 @@ struct BuildDetailView: View {
     @ObservedObject var store: BuildStore
     let buildID: UUID
     @State private var showingCreateWall = false
+    @State private var confirmingDelete = false
+    @State private var showingDeleteError = false
+    @Environment(\.dismiss) private var dismiss
     private var build: Build? { store.builds.first { $0.id == buildID } }
 
     var body: some View {
@@ -270,13 +338,17 @@ struct BuildDetailView: View {
                 }
                 ForEach(build.walls) { wall in
                     NavigationLink {
-                        WallDetailView(wall: wall)
+                        WallDetailView(store: store, buildID: buildID, wallID: wall.id)
                     } label: {
                         Label(wall.title, systemImage: "rectangle.split.3x1")
                     }
                 }
                 Button("Add a Wall", systemImage: "plus") { showingCreateWall = true }
                     .accessibilityIdentifier("add-wall")
+            }
+            Section {
+                Button("Delete Build", role: .destructive) { confirmingDelete = true }
+                    .accessibilityIdentifier("delete-build")
             }
           }
         }
@@ -285,6 +357,18 @@ struct BuildDetailView: View {
         .sheet(isPresented: $showingCreateWall) {
             CreateWallView(store: store, buildID: buildID)
         }
+        .alert("Delete this Build?", isPresented: $confirmingDelete) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete Build", role: .destructive) {
+                do { try store.deleteBuild(buildID: buildID); dismiss() }
+                catch { showingDeleteError = true }
+            }
+        } message: {
+            Text("This permanently deletes this Build and all its Walls and Bricks. This cannot be undone.")
+        }
+        .alert("Build wasn’t deleted", isPresented: $showingDeleteError) {
+            Button("OK", role: .cancel) { }
+        } message: { Text("Nothing was removed. Please try again.") }
     }
 }
 
@@ -341,16 +425,130 @@ struct CreateWallView: View {
 }
 
 struct WallDetailView: View {
-    let wall: Wall
+    @ObservedObject var store: BuildStore
+    let buildID: UUID
+    let wallID: UUID
+    @Environment(\.dismiss) private var dismiss
+    @State private var showingCreate = false
+    @State private var confirmingDelete = false
+    @State private var brickToDelete: Brick?
+    @State private var showingError = false
+    private var wall: Wall? {
+        store.builds.first { $0.id == buildID }?.walls.first { $0.id == wallID }
+    }
+
     var body: some View {
         List {
+          if let wall = wall {
             Section { Text(wall.title).font(.title2.bold()) }
             Section("Bricks") {
-                Text("Your Wall is saved. Bricks—the small actions that build it—are coming next.")
-                    .foregroundStyle(.secondary)
+                if wall.bricks.isEmpty {
+                    Text("A Brick is a small action, like reading for 10 minutes. Add one and tap it when you’re done.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("\(wall.bricks.filter { $0.isComplete }.count) of \(wall.bricks.count) complete")
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("brick-progress")
+                }
+                ForEach(wall.bricks) { brick in
+                    HStack {
+                        Button {
+                            do { try store.toggleBrick(buildID: buildID, wallID: wallID, brickID: brick.id) }
+                            catch { showingError = true }
+                        } label: {
+                            Label(brick.title, systemImage: brick.isComplete ? "checkmark.circle.fill" : "circle")
+                                .strikethrough(brick.isComplete)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(brick.title)
+                        .accessibilityValue(brick.isComplete ? "Complete" : "Incomplete")
+                        .accessibilityHint("Double tap to change completion")
+                        Spacer()
+                        Button(role: .destructive) { brickToDelete = brick } label: {
+                            Image(systemName: "trash").frame(minWidth: 44, minHeight: 44)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Delete \(brick.title)")
+                    }
+                }
+                Button("Add a Brick", systemImage: "plus") { showingCreate = true }
+                    .accessibilityIdentifier("add-brick")
             }
+            Section {
+                Button("Delete Wall", role: .destructive) { confirmingDelete = true }
+                    .accessibilityIdentifier("delete-wall")
+            }
+          }
         }
         .navigationTitle("Your Wall")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showingCreate) {
+            CreateBrickView(store: store, buildID: buildID, wallID: wallID)
+        }
+        .alert("Delete this Wall?", isPresented: $confirmingDelete) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete Wall", role: .destructive) {
+                do { try store.deleteWall(buildID: buildID, wallID: wallID); dismiss() }
+                catch { showingError = true }
+            }
+        } message: { Text("This permanently deletes this Wall and all its Bricks. This cannot be undone.") }
+        .alert("Delete this Brick?", isPresented: Binding(
+            get: { brickToDelete != nil }, set: { if !$0 { brickToDelete = nil } }
+        ), presenting: brickToDelete) { brick in
+            Button("Cancel", role: .cancel) { brickToDelete = nil }
+            Button("Delete Brick", role: .destructive) {
+                do { try store.deleteBrick(buildID: buildID, wallID: wallID, brickID: brick.id) }
+                catch { showingError = true }
+                brickToDelete = nil
+            }
+        } message: { brick in Text("Permanently delete “\(brick.title)” and its completion status? This cannot be undone.") }
+        .alert("Change wasn’t saved", isPresented: $showingError) {
+            Button("OK", role: .cancel) { }
+        } message: { Text("Your saved data hasn’t changed. Please try again.") }
     }
 }
+
+struct CreateBrickView: View {
+    @ObservedObject var store: BuildStore
+    let buildID: UUID
+    let wallID: UUID
+    @Environment(\.dismiss) private var dismiss
+    @State private var title = ""
+    @State private var showingError = false
+    @FocusState private var titleFocused: Bool
+    private var cleanTitle: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("e.g. Read for 10 minutes", text: $title)
+                        .focused($titleFocused)
+                        .textInputAutocapitalization(.sentences)
+                        .accessibilityLabel("Brick name")
+                        .accessibilityIdentifier("brick-name")
+                } header: { Text("Name your Brick") }
+                  footer: { Text(cleanTitle.count > 80 ? "Keep your name to 80 characters or fewer." : "Choose one small action you can complete.") }
+            }
+            .navigationTitle("Add a Brick")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Create") {
+                        do { try store.createBrick(buildID: buildID, wallID: wallID, title: title); dismiss() }
+                        catch { showingError = true }
+                    }
+                    .disabled(cleanTitle.isEmpty || cleanTitle.count > 80)
+                    .accessibilityIdentifier("save-brick")
+                }
+            }
+            .onAppear { titleFocused = true }
+            .interactiveDismissDisabled(!title.isEmpty)
+            .alert("Brick wasn’t saved", isPresented: $showingError) {
+                Button("OK", role: .cancel) { }
+            } message: { Text("Your draft is still here. Please try again.") }
+        }
+    }
+}
+// Bricks are one-time actions in this release; no automatic daily reset.
