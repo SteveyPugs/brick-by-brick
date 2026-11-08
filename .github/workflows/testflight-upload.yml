@@ -1,0 +1,177 @@
+name: Upload to TestFlight (approval required)
+
+on:
+  push:
+    branches: [native-ios/cloud-build-proof]
+    paths: [.github/workflows/testflight-upload.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: testflight-upload-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    name: Build and upload to Apple TestFlight
+    if: github.ref == 'refs/heads/native-ios/cloud-build-proof'
+    environment: testflight
+    runs-on: macos-15
+    timeout-minutes: 40
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Prepare current Apple toolchain
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          brew install xcodegen
+          xcodegen generate --spec native-ios/project.yml
+      - name: Import signing assets into a temporary keychain
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$BUILD_CERTIFICATE_BASE64"
+          test -n "$BUILD_PROVISION_PROFILE_BASE64"
+          test -n "$P12_PASSWORD"
+          SIGNING_WORK=$(mktemp -d "$RUNNER_TEMP/brick-signing.XXXXXX")
+          echo "SIGNING_WORK=$SIGNING_WORK" >> "$GITHUB_ENV"
+          export SIGNING_WORK
+          python3 - <<'PY'
+          import base64, os, pathlib
+          root = pathlib.Path(os.environ['SIGNING_WORK'])
+          for name, secret in [('distribution.p12', 'BUILD_CERTIFICATE_BASE64'), ('profile.mobileprovision', 'BUILD_PROVISION_PROFILE_BASE64')]:
+              (root / name).write_bytes(base64.b64decode(os.environ[secret], validate=True))
+          PY
+          security cms -D -i "$SIGNING_WORK/profile.mobileprovision" > "$SIGNING_WORK/profile.plist"
+          python3 - <<'PY'
+          import os, pathlib, plistlib, datetime, uuid
+          root = pathlib.Path(os.environ['SIGNING_WORK'])
+          p = plistlib.loads((root / 'profile.plist').read_bytes())
+          assert p['TeamIdentifier'] == ['GJYTR79LS7'], 'Wrong team'
+          assert p['Entitlements']['application-identifier'] == 'GJYTR79LS7.com.steveypugs.brickbybrick', 'Wrong app'
+          assert p['Entitlements']['get-task-allow'] is False, 'Development profile rejected'
+          assert 'ProvisionedDevices' not in p and not p.get('ProvisionsAllDevices'), 'App Store profile required'
+          assert p['ExpirationDate'] > datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None), 'Expired profile'
+          uuid.UUID(p['UUID'])
+          profile_uuid = p['UUID']
+          assert p['Name'] == 'BrickByBrick App Store', 'Unexpected profile name'
+          target = pathlib.Path.home() / 'Library/Developer/Xcode/UserData/Provisioning Profiles' / (profile_uuid + '.mobileprovision')
+          target.parent.mkdir(parents=True, exist_ok=True)
+          with target.open('xb') as out:
+              out.write((root / 'profile.mobileprovision').read_bytes())
+          legacy = pathlib.Path.home() / 'Library/MobileDevice/Provisioning Profiles' / (profile_uuid + '.mobileprovision')
+          legacy.parent.mkdir(parents=True, exist_ok=True)
+          with legacy.open('xb') as out:
+              out.write((root / 'profile.mobileprovision').read_bytes())
+          with open(os.environ['GITHUB_ENV'], 'a') as out:
+              out.write('PROFILE_UUID=' + profile_uuid + '\n')
+              out.write('INSTALLED_PROFILE=' + str(target) + '\n')
+              out.write('LEGACY_PROFILE=' + str(legacy) + '\n')
+          PY
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 32)
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$SIGNING_WORK/signing.keychain-db"
+          security set-keychain-settings -lut 3600 "$SIGNING_WORK/signing.keychain-db"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$SIGNING_WORK/signing.keychain-db"
+          security import "$SIGNING_WORK/distribution.p12" -P "$P12_PASSWORD" -k "$SIGNING_WORK/signing.keychain-db" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -k "$KEYCHAIN_PASSWORD" "$SIGNING_WORK/signing.keychain-db" >/dev/null
+          security list-keychains -d user -s "$SIGNING_WORK/signing.keychain-db" "$HOME/Library/Keychains/login.keychain-db"
+          security find-identity -v -p codesigning "$SIGNING_WORK/signing.keychain-db"
+      - name: Archive and verify distribution signature
+        run: |
+          set -euo pipefail
+          xcodebuild archive \
+            -project native-ios/BrickByBrick.xcodeproj \
+            -scheme BrickByBrick -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/BrickByBrick-signed.xcarchive" \
+            -derivedDataPath "$RUNNER_TEMP/brick-signed-derived" \
+            DEVELOPMENT_TEAM=GJYTR79LS7 CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY='Apple Distribution' \
+            PROVISIONING_PROFILE_SPECIFIER='BrickByBrick App Store' \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER.$GITHUB_RUN_ATTEMPT"
+          APP="$RUNNER_TEMP/BrickByBrick-signed.xcarchive/Products/Applications/BrickByBrick.app"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign -dv --verbose=4 "$APP" 2> "$RUNNER_TEMP/brick-signature.txt"
+          grep -q 'TeamIdentifier=GJYTR79LS7' "$RUNNER_TEMP/brick-signature.txt"
+          grep -q 'Authority=Apple Distribution: Stephen Pugliese' "$RUNNER_TEMP/brick-signature.txt"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")" = 'com.steveypugs.brickbybrick'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "$APP/Info.plist")" = 'AppIcon'
+      - name: Export App Store package
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, pathlib, plistlib
+          options = {
+              'method': 'app-store-connect', 'destination': 'export',
+              'teamID': 'GJYTR79LS7', 'signingStyle': 'manual',
+              'signingCertificate': 'Apple Distribution',
+              'provisioningProfiles': {'com.steveypugs.brickbybrick': 'BrickByBrick App Store'},
+              'manageAppVersionAndBuildNumber': False, 'uploadSymbols': True,
+          }
+          (pathlib.Path(os.environ['SIGNING_WORK']) / 'ExportOptions.plist').write_bytes(plistlib.dumps(options))
+          PY
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/BrickByBrick-signed.xcarchive" \
+            -exportPath "$RUNNER_TEMP/brick-export" \
+            -exportOptionsPlist "$SIGNING_WORK/ExportOptions.plist"
+          test -s "$RUNNER_TEMP/brick-export/BrickByBrick.ipa"
+      - name: Validate and upload to App Store Connect
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          export API_PRIVATE_KEYS_DIR="$SIGNING_WORK/api-keys"
+          python3 - <<'PY'
+          import os, pathlib, re, uuid
+          key_id = os.environ['APP_STORE_CONNECT_KEY_ID'].strip()
+          assert re.fullmatch(r'[A-Z0-9]{10}', key_id), 'Invalid API key ID'
+          uuid.UUID(os.environ['APP_STORE_CONNECT_ISSUER_ID'].strip())
+          key = os.environ['APP_STORE_CONNECT_PRIVATE_KEY'].strip()
+          assert key.startswith('-----BEGIN PRIVATE KEY-----') and key.endswith('-----END PRIVATE KEY-----'), 'API secret must contain the full .p8 text'
+          folder = pathlib.Path(os.environ['API_PRIVATE_KEYS_DIR'])
+          folder.mkdir(mode=0o700)
+          (folder / ('AuthKey_' + key_id + '.p8')).write_text(key + '\n')
+          PY
+          xcrun altool --validate-app -f "$RUNNER_TEMP/brick-export/BrickByBrick.ipa" -t ios \
+            --apiKey "$APP_STORE_CONNECT_KEY_ID" --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
+          xcrun altool --upload-app -f "$RUNNER_TEMP/brick-export/BrickByBrick.ipa" -t ios \
+            --apiKey "$APP_STORE_CONNECT_KEY_ID" --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
+          printf '%s\n' '## Uploaded to Apple' 'App Store Connect accepted the upload. Apple processing and TestFlight tester setup are still required.' 'This does not submit the app for public App Store release.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove temporary signing credentials
+        if: always()
+        run: |
+          set -eu
+          if [ -n "${SIGNING_WORK:-}" ]; then
+            security delete-keychain "$SIGNING_WORK/signing.keychain-db" || true
+            rm -f "$SIGNING_WORK/distribution.p12" "$SIGNING_WORK/profile.mobileprovision" "$SIGNING_WORK/profile.plist"
+          fi
+          python3 - <<'PY'
+          import os, pathlib
+          if os.environ.get('SIGNING_WORK'):
+              folder = pathlib.Path(os.environ['SIGNING_WORK']) / 'api-keys'
+              if folder.is_dir():
+                  for key in folder.iterdir():
+                      if key.is_file() and key.name.startswith('AuthKey_') and key.suffix == '.p8':
+                          key.unlink()
+          PY
+          if [ -n "${INSTALLED_PROFILE:-}" ]; then
+            rm -f "$INSTALLED_PROFILE"
+          fi
+          if [ -n "${LEGACY_PROFILE:-}" ]; then
+            rm -f "$LEGACY_PROFILE"
+          fi
