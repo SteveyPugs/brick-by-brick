@@ -1,0 +1,48 @@
+name: Native iPhone build proof
+
+on:
+  push:
+    branches: [native-ios/cloud-build-proof]
+    paths: ['native-ios/**', '.github/workflows/native-ios-proof.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-launch:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          xcodebuild -version
+          xcodegen --version
+          xcodegen generate --spec native-ios/project.yml
+      - name: Build for iOS Simulator without signing
+        run: |
+          set -o pipefail
+          xcodebuild -project native-ios/BrickByBrick.xcodeproj \
+            -scheme BrickByBrick -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tee build.log
+      - name: Launch in iPhone simulator and capture screen
+        run: |
+          SIMULATOR_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(v["udid"] for k,vs in d["devices"].items() if "iOS" in k for v in vs if "iPhone" in v["name"]))')
+          xcrun simctl boot "$SIMULATOR_ID"
+          xcrun simctl bootstatus "$SIMULATOR_ID" -b
+          xcrun simctl install "$SIMULATOR_ID" build/Build/Products/Debug-iphonesimulator/BrickByBrick.app
+          xcrun simctl launch "$SIMULATOR_ID" com.steveypugs.brickbybrick
+          sleep 5
+          xcrun simctl io "$SIMULATOR_ID" screenshot native-iphone-proof.png
+      - name: Save build evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-iphone-build-evidence
+          path: |
+            build.log
+            native-iphone-proof.png
+          retention-days: 7
