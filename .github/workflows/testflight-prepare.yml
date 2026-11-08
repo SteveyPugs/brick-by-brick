@@ -1,0 +1,63 @@
+name: TestFlight preparation (unsigned)
+
+on:
+  push:
+    branches: [native-ios/cloud-build-proof]
+    paths:
+      - native-ios/**
+      - .github/workflows/testflight-prepare.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: testflight-prepare-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    name: Verify Release archive for a real iPhone
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - name: Generate project and record toolchain
+        run: |
+          set -euo pipefail
+          brew install xcodegen
+          xcodebuild -version
+          xcodebuild -showsdks
+          xcodegen generate --spec native-ios/project.yml
+      - name: Archive Release for iPhone (no signing or upload)
+        run: |
+          set -euo pipefail
+          xcodebuild archive \
+            -project native-ios/BrickByBrick.xcodeproj \
+            -scheme BrickByBrick -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/BrickByBrick.xcarchive" \
+            -derivedDataPath "$RUNNER_TEMP/testflight-derived-data" \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER.$GITHUB_RUN_ATTEMPT" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            | tee release-archive.log
+      - name: Verify archive identity
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/BrickByBrick.xcarchive/Products/Applications/BrickByBrick.app"
+          test -d "$APP"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")" = "com.steveypugs.brickbybrick"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :UIDeviceFamily:0' "$APP/Info.plist")" = "1"
+          file "$APP/BrickByBrick" | tee archive-verification.txt
+          file "$APP/BrickByBrick" | grep -q arm64
+          printf '%s\n' 'Release iPhone archive verified. UNSIGNED: not installable and not uploaded to Apple.' >> archive-verification.txt
+          printf '%s\n' '## TestFlight preparation' 'Release archive verified for iPhone.' 'Signing, App Store validation, upload, and TestFlight installation are NOT tested or enabled.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Save non-secret preparation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: testflight-preparation-evidence
+          path: |
+            release-archive.log
+            archive-verification.txt
+          retention-days: 7
