@@ -15,7 +15,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.steveypugs.brickbybrick
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "5.0"
-        MARKETING_VERSION: "0.1.0"
+        MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         SUPPORTS_MACCATALYST: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -23,6 +23,8 @@ targets:
       path: Generated/Info.plist
       properties:
         CFBundleDisplayName: Brick by Brick
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
