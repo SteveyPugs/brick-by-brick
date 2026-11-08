@@ -1,4 +1,5 @@
 name: Upload to TestFlight (approval required)
+# Walls release: create and persist Walls without replacing existing Builds.
 
 on:
   push:
@@ -107,6 +108,8 @@ jobs:
           grep -q 'TeamIdentifier=GJYTR79LS7' "$RUNNER_TEMP/brick-signature.txt"
           grep -q 'Authority=Apple Distribution: Stephen Pugliese' "$RUNNER_TEMP/brick-signature.txt"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")" = 'com.steveypugs.brickbybrick'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Info.plist")" = '1.0'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Info.plist")" = "$GITHUB_RUN_NUMBER.$GITHUB_RUN_ATTEMPT"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "$APP/Info.plist")" = 'AppIcon'
       - name: Export App Store package
         run: |
