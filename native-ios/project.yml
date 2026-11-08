@@ -24,8 +24,22 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+  BrickByBrickUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - Tests
+    dependencies:
+      - target: BrickByBrick
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.0"
 schemes:
   BrickByBrick:
     build:
       targets:
         BrickByBrick: all
+    test:
+      targets:
+        - BrickByBrickUITests
