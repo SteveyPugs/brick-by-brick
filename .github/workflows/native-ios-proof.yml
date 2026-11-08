@@ -37,6 +37,16 @@ jobs:
           xcrun simctl launch "$SIMULATOR_ID" com.steveypugs.brickbybrick
           sleep 5
           xcrun simctl io "$SIMULATOR_ID" screenshot native-iphone-proof.png
+      - name: Test Build creation and persistence after relaunch
+        run: |
+          set -o pipefail
+          SIMULATOR_ID=$(xcrun simctl list devices booted -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(v["udid"] for k,vs in d["devices"].items() if "iOS" in k for v in vs if "iPhone" in v["name"]))')
+          xcodebuild -project native-ios/BrickByBrick.xcodeproj \
+            -scheme BrickByBrick -configuration Debug \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -parallel-testing-enabled NO -derivedDataPath build \
+            -resultBundlePath BuildsTests.xcresult \
+            CODE_SIGNING_ALLOWED=NO test | tee test.log
       - name: Save build evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -45,4 +55,6 @@ jobs:
           path: |
             build.log
             native-iphone-proof.png
+            test.log
+            BuildsTests.xcresult
           retention-days: 7
