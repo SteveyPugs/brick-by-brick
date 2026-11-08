@@ -1,0 +1,31 @@
+name: BrickByBrick
+options:
+  bundleIdPrefix: com.steveypugs
+  deploymentTarget:
+    iOS: "17.0"
+targets:
+  BrickByBrick:
+    type: application
+    platform: iOS
+    sources:
+      - BrickByBrickApp.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.steveypugs.brickbybrick
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "5.0"
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SUPPORTS_MACCATALYST: NO
+    info:
+      path: Generated/Info.plist
+      properties:
+        CFBundleDisplayName: Brick by Brick
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+schemes:
+  BrickByBrick:
+    build:
+      targets:
+        BrickByBrick: all
