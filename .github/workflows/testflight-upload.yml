@@ -1,5 +1,5 @@
 name: Upload to TestFlight (approval required)
-# Walls release: create and persist Walls without replacing existing Builds.
+# Bricks release: completion tracking and confirmed Build, Wall, and Brick deletion.
 
 on:
   push:
