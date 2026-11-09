@@ -38,7 +38,7 @@ enum DemoPlanner {
             ]),
             PlanWallDraft(title: reading ? "Spend time reading" : "Take small steps", bricks: [
                 PlanBrickDraft(title: reading ? "Read for a little while" : "Focused practice", kind: .amount, target: "20", unit: "minutes"),
-                PlanBrickDraft(title: reading ? "Read a few pages" : "Try three small actions", kind: .count, target: "3", unit: reading ? "pages" : "actions")
+                PlanBrickDraft(title: reading ? "Read a few pages" : "Try three small actions", kind: .amount, target: "3", unit: reading ? "pages" : "actions")
             ])
         ]
     }
@@ -95,7 +95,7 @@ struct PlannerView: View {
                                 } label: {
                                     VStack(alignment: .leading) {
                                         Text(brick.title)
-                                        Text(brick.kind == .yesNo ? "Yes/no" : "\(brick.target) \(brick.unit)")
+                                        Text(brick.kind == .yesNo ? "Check off" : "\(brick.target) \(brick.unit)")
                                             .font(.caption).foregroundStyle(.secondary)
                                     }
                                 }

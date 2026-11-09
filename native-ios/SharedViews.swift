@@ -1,5 +1,13 @@
 import SwiftUI
 
+enum BrickStyle {
+    static let accent = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 1, green: 0.62, blue: 0.48, alpha: 1)
+            : UIColor(red: 0.61, green: 0.27, blue: 0.19, alpha: 1)
+    })
+}
+
 enum NumberInput {
     static func parse(_ text: String) -> Double? {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -33,22 +41,40 @@ struct MeasurementFields: View {
     @Binding var kind: BrickKind
     @Binding var target: String
     @Binding var unit: String
+    private let suggestedUnits = ["minutes", "pages", "reps", "miles", "steps", "glasses"]
+    private var tracking: Binding<Bool> {
+        Binding(get: { kind != .yesNo }, set: { enabled in
+            if enabled != (kind != .yesNo) { kind = enabled ? .amount : .yesNo }
+        })
+    }
     var body: some View {
         Section {
-            Picker("Brick type", selection: $kind) {
-                ForEach(BrickKind.allCases, id: \.self) { Text($0.label).tag($0) }
+            Picker("Brick type", selection: tracking) {
+                Text("Check off").tag(false)
+                Text("Track progress").tag(true)
             }
             .pickerStyle(.segmented).accessibilityIdentifier("brick-type")
             if kind != .yesNo {
                 TextField("Target", text: $target).keyboardType(.decimalPad)
                     .accessibilityIdentifier("brick-target")
-                TextField("Unit, e.g. glasses or minutes", text: $unit)
+                Menu {
+                    ForEach(suggestedUnits, id: \.self) { suggestion in
+                        Button(suggestion) { unit = suggestion }
+                    }
+                    Button("Custom") { unit = "" }
+                } label: {
+                    Label("Suggested units", systemImage: "list.bullet")
+                }
+                .accessibilityIdentifier("brick-unit-suggestions")
+                TextField("Unit (choose above or type your own)", text: $unit)
+                    .textInputAutocapitalization(.never)
                     .accessibilityIdentifier("brick-unit")
             }
         } header: { Text("How to measure it") }
           footer: {
             Text(kind == .yesNo ? "Check it off when done. No automatic daily reset." :
-                 "Use a positive target (up to 1 billion) and a unit (up to 30 characters). Counts use whole numbers; amounts allow decimals. No automatic daily reset.")
+                 kind == .count ? "This Brick uses whole numbers. Choose a unit above or enter your own." :
+                 "Use a whole number or a decimal, like 20 pages or 2.5 miles. No automatic daily reset.")
         }
     }
 }

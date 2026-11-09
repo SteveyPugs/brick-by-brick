@@ -22,7 +22,7 @@ struct WallDetailView: View {
             Section { Text(wall.title).font(.title2.bold()) }
             Section("Bricks") {
                 if wall.bricks.isEmpty {
-                    Text("A Brick is a small action, like reading for 10 minutes. Add one and tap it when you’re done.")
+                    Text("Add a small action you can check off or track toward a target.")
                         .foregroundStyle(.secondary)
                 } else {
                     Text("\(wall.bricks.filter { $0.isComplete }.count) of \(wall.bricks.count) complete")
@@ -30,34 +30,32 @@ struct WallDetailView: View {
                         .accessibilityIdentifier("brick-progress")
                 }
                 ForEach(wall.bricks) { brick in
-                    HStack {
+                    HStack(spacing: 8) {
                         Button {
                             if brick.kind == .yesNo {
                                 do { try store.toggleBrick(buildID: buildID, wallID: wallID, brickID: brick.id) }
                                 catch { showingError = true }
                             } else { brickToMeasure = brick }
                         } label: {
-                            VStack(alignment: .leading, spacing: 5) {
-                                Label(brick.title, systemImage: brick.isComplete ? "checkmark.circle.fill" : "circle")
-                                    .strikethrough(brick.isComplete)
-                                if brick.kind != .yesNo { Text(brick.progressLabel).font(.caption) }
-                            }
+                            BrickRowContent(brick: brick)
                         }
                         .buttonStyle(.borderless)
                         .accessibilityLabel(brick.title)
                         .accessibilityValue(brick.kind == .yesNo ? (brick.isComplete ? "Complete" : "Incomplete") : brick.progressLabel)
-                        .accessibilityHint(brick.kind == .yesNo ? "Double tap to change completion" : "Double tap to record progress")
-                        Spacer()
-                        Button { brickToRename = brick } label: {
-                            Image(systemName: "pencil").frame(minWidth: 44, minHeight: 44)
+                        .accessibilityHint(brick.kind == .yesNo ? "Changes completion" : "Opens progress editor")
+                        Menu {
+                            Button("Rename", systemImage: "pencil") { brickToRename = brick }
+                            Button(role: .destructive) { brickToDelete = brick } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .font(.title3)
+                                .foregroundStyle(.secondary)
+                                .frame(minWidth: 44, minHeight: 44)
                         }
                         .buttonStyle(.borderless)
-                        .accessibilityLabel("Edit \(brick.title)")
-                        Button(role: .destructive) { brickToDelete = brick } label: {
-                            Image(systemName: "trash").frame(minWidth: 44, minHeight: 44)
-                        }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("Delete \(brick.title)")
+                        .accessibilityLabel("Options for \(brick.title)")
                     }
                 }
                 Button("Add a Brick", systemImage: "plus") { showingCreate = true }
@@ -110,6 +108,37 @@ struct WallDetailView: View {
         .alert("Change wasn’t saved", isPresented: $showingError) {
             Button("OK", role: .cancel) { }
         } message: { Text("Your saved data hasn’t changed. Please try again.") }
+    }
+}
+
+private struct BrickRowContent: View {
+    let brick: Brick
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: brick.isComplete ? "checkmark.circle.fill" :
+                    brick.kind == .yesNo ? "circle" : "chart.bar.fill")
+                .font(.title3)
+                .foregroundStyle(BrickStyle.accent)
+                .frame(width: 36, height: 36)
+                .background(BrickStyle.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+            VStack(alignment: .leading, spacing: 5) {
+                Text(brick.title).font(.body.weight(.semibold)).foregroundStyle(.primary)
+                if brick.kind != .yesNo {
+                    Text("\(brick.progress.formatted()) / \(brick.target.formatted()) \(brick.unit)")
+                        .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                    if brick.target > 0 {
+                        ProgressView(value: min(brick.progress / brick.target, 1))
+                    }
+                } else {
+                    Text(brick.isComplete ? "Done" : "Tap to check off")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
     }
 }
 

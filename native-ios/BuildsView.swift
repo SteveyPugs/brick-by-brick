@@ -28,40 +28,27 @@ struct BuildsView: View {
                             .accessibilityIdentifier("create-first-build")
                     }
                 } else {
-                    List {
-                        Section {
-                            Text("Meaningful things are built one brick at a time.")
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 16) {
+                            Text("One brick at a time.")
+                                .font(.subheadline)
                                 .foregroundStyle(.secondary)
-                        }
-                        Section("Your Builds") {
                             ForEach(store.builds) { build in
                                 NavigationLink {
                                     BuildDetailView(store: store, buildID: build.id)
                                 } label: {
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        Text(build.title).font(.headline)
-                                        if !build.motivation.isEmpty {
-                                            Text(build.motivation)
-                                                .font(.subheadline)
-                                                .foregroundStyle(.secondary)
-                                                .lineLimit(2)
-                                        }
-                                        Text(build.walls.isEmpty ? "Ready for your first Wall" : "\(build.walls.count) \(build.walls.count == 1 ? "Wall" : "Walls")")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                        CompletionSummary(bricks: build.walls.flatMap { $0.bricks })
-                                    }
-                                    .padding(.vertical, 6)
+                                    BuildCard(build: build)
                                 }
+                                .buttonStyle(.plain)
                                 .accessibilityIdentifier("build-row")
                             }
-                        }
-                        Section {
                             Label("Saved on this device", systemImage: "iphone")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
+                        .padding(20)
                     }
+                    .background(Color(uiColor: .systemGroupedBackground))
                 }
             }
             .navigationTitle("Builds")
@@ -80,6 +67,45 @@ struct BuildsView: View {
             .sheet(isPresented: $showingCreate) { CreateBuildView(store: store) }
             .sheet(isPresented: $showingPlanner) { PlannerView(store: store) }
         }
+    }
+}
+
+private struct BuildCard: View {
+    let build: Build
+    private var bricks: [Brick] { build.walls.flatMap { $0.bricks } }
+    private var completed: Int { bricks.filter { $0.isComplete }.count }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "square.stack.3d.up.fill")
+                    .foregroundStyle(BrickStyle.accent)
+                    .frame(width: 40, height: 40)
+                    .background(BrickStyle.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(build.title).font(.title3.bold()).foregroundStyle(.primary)
+                    if !build.motivation.isEmpty {
+                        Text(build.motivation).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+                    }
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary).accessibilityHidden(true)
+            }
+            if bricks.isEmpty {
+                Text(build.walls.isEmpty ? "Ready for your first Wall" : "Ready for your first Brick")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                ProgressView(value: Double(completed), total: Double(bricks.count))
+                    .accessibilityHidden(true)
+                CompletionSummary(bricks: bricks)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
+        .contentShape(RoundedRectangle(cornerRadius: 20))
     }
 }
 

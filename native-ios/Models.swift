@@ -1,8 +1,9 @@
 import Foundation
 
-enum BrickKind: String, Codable, CaseIterable {
+enum BrickKind: String, Codable {
+    // Keep the original count encoding and whole-number rule for saved Bricks.
+    // New tracked Bricks use amount, which accepts whole numbers and decimals.
     case yesNo, count, amount
-    var label: String { switch self { case .yesNo: return "Yes/no"; case .count: return "Count"; case .amount: return "Amount" } }
 }
 
 struct Brick: Identifiable, Codable {

@@ -7,7 +7,7 @@ struct BrickByBrickApp: App {
     var body: some Scene {
         WindowGroup {
             BuildsView(store: store)
-                .tint(Color(red: 0.31, green: 0.41, blue: 0.33))
+                .tint(BrickStyle.accent)
         }
     }
 }
