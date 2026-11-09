@@ -57,23 +57,36 @@ struct MeasurementFields: View {
             if kind != .yesNo {
                 TextField("Target", text: $target).keyboardType(.decimalPad)
                     .accessibilityIdentifier("brick-target")
-                Menu {
-                    ForEach(suggestedUnits, id: \.self) { suggestion in
-                        Button(suggestion) { unit = suggestion }
-                    }
-                    Button("Custom") { unit = "" }
-                } label: {
-                    Label("Suggested units", systemImage: "list.bullet")
-                }
-                .accessibilityIdentifier("brick-unit-suggestions")
-                TextField("Unit (choose above or type your own)", text: $unit)
+                TextField("Unit or custom unit", text: $unit)
                     .textInputAutocapitalization(.never)
                     .accessibilityIdentifier("brick-unit")
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Suggested units").font(.caption).foregroundStyle(.secondary)
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 82), alignment: .leading)],
+                              alignment: .leading, spacing: 6) {
+                        ForEach(suggestedUnits, id: \.self) { suggestion in
+                            Button {
+                                unit = suggestion
+                            } label: {
+                                Text(suggestion)
+                                    .font(.subheadline)
+                                    .padding(.horizontal, 6)
+                                    .frame(maxWidth: .infinity, minHeight: 44)
+                                    .background(BrickStyle.accent.opacity(unit == suggestion ? 0.20 : 0.08),
+                                                in: RoundedRectangle(cornerRadius: 10))
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityAddTraits(unit == suggestion ? .isSelected : [])
+                            .accessibilityIdentifier("brick-unit-\(suggestion)")
+                        }
+                    }
+                }
             }
         } header: { Text("How to measure it") }
           footer: {
             Text(kind == .yesNo ? "Check it off when done. No automatic daily reset." :
-                 kind == .count ? "This Brick uses whole numbers. Choose a unit above or enter your own." :
+                 kind == .count ? "This Brick uses whole numbers. Choose a suggestion or enter your own unit." :
                  "Use a whole number or a decimal, like 20 pages or 2.5 miles. No automatic daily reset.")
         }
     }

@@ -93,6 +93,10 @@ private struct BuildCard: View {
                 Image(systemName: "chevron.right").font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary).accessibilityHidden(true)
             }
+            if !build.walls.isEmpty {
+                Text("\(build.walls.count) \(build.walls.count == 1 ? "Wall" : "Walls")")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             if bricks.isEmpty {
                 Text(build.walls.isEmpty ? "Ready for your first Wall" : "Ready for your first Brick")
                     .font(.caption).foregroundStyle(.secondary)
