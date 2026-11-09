@@ -1,5 +1,5 @@
 name: Upload to TestFlight (approval required)
-# Measured Bricks release: editing, progress summaries, and offline sample planning.
+# Brick tracking refresh: simpler creation, suggested units, and updated screens.
 
 on:
   push:
