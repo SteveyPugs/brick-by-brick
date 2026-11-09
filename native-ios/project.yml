@@ -19,6 +19,7 @@ targets:
       - CreateBrickView.swift
       - SharedViews.swift
       - PlannerView.swift
+      - PlanGenerator.swift
       - Assets.xcassets
     settings:
       base:

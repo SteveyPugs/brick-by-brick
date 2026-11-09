@@ -6,8 +6,11 @@ struct BrickByBrickApp: App {
 
     var body: some Scene {
         WindowGroup {
-            BuildsView(store: store)
-                .tint(BrickStyle.accent)
+            TimelineView(.everyMinute) { context in
+                BuildsView(store: store)
+                    .environment(\.brickToday, context.date)
+                    .tint(BrickStyle.accent)
+            }
         }
     }
 }

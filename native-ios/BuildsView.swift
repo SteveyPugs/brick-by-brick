@@ -72,8 +72,10 @@ struct BuildsView: View {
 
 private struct BuildCard: View {
     let build: Build
+    @Environment(\.brickToday) private var today
     private var bricks: [Brick] { build.walls.flatMap { $0.bricks } }
-    private var completed: Int { bricks.filter { $0.isComplete }.count }
+    private var due: [Brick] { Brick.dueBricks(bricks, on: today) }
+    private var completed: Int { due.filter { $0.isComplete }.count }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -101,8 +103,10 @@ private struct BuildCard: View {
                 Text(build.walls.isEmpty ? "Ready for your first Wall" : "Ready for your first Brick")
                     .font(.caption).foregroundStyle(.secondary)
             } else {
-                ProgressView(value: Double(completed), total: Double(bricks.count))
-                    .accessibilityHidden(true)
+                if !due.isEmpty {
+                    ProgressView(value: Double(completed), total: Double(due.count))
+                        .accessibilityHidden(true)
+                }
                 CompletionSummary(bricks: bricks)
             }
         }

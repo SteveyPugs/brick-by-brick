@@ -8,6 +8,36 @@ enum BrickStyle {
     })
 }
 
+private struct BrickTodayKey: EnvironmentKey {
+    static let defaultValue = Date.now
+}
+
+extension EnvironmentValues {
+    var brickToday: Date {
+        get { self[BrickTodayKey.self] }
+        set { self[BrickTodayKey.self] = newValue }
+    }
+}
+
+struct RepeatFields: View {
+    @Binding var days: Set<BrickWeekday>
+    var body: some View {
+        Section {
+            DisclosureGroup(days.isEmpty ? "One time" : days.count == 7 ? "Every day" : "Selected weekdays") {
+                Button("Every day") { days = Set(BrickWeekday.allCases) }
+                Button("One time") { days = [] }
+                ForEach(BrickWeekday.displayOrder, id: \.self) { day in
+                    Toggle(day.name, isOn: Binding(get: { days.contains(day) }, set: { selected in
+                        if selected { days.insert(day) } else { days.remove(day) }
+                    }))
+                }
+            }
+            .accessibilityIdentifier("brick-schedule")
+        } header: { Text("Schedule") }
+          footer: { Text("Repeat Bricks get a fresh checkoff or target on each selected day.") }
+    }
+}
+
 enum NumberInput {
     static func parse(_ text: String) -> Double? {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -31,8 +61,11 @@ enum NumberInput {
 
 struct CompletionSummary: View {
     let bricks: [Brick]
+    @Environment(\.brickToday) private var today
     var body: some View {
-        Text("\(bricks.filter { $0.isComplete }.count) of \(bricks.count) Bricks complete")
+        let due = Brick.dueBricks(bricks, on: today)
+        let label = bricks.contains { !$0.repeatDays.isEmpty } ? " complete today" : " Bricks complete"
+        Text(due.isEmpty && !bricks.isEmpty ? "No Bricks scheduled today" : "\(due.filter { $0.isComplete }.count) of \(due.count)\(label)")
             .font(.caption).foregroundStyle(.secondary)
     }
 }
@@ -85,9 +118,9 @@ struct MeasurementFields: View {
             }
         } header: { Text("How to measure it") }
           footer: {
-            Text(kind == .yesNo ? "Check it off when done. No automatic daily reset." :
+            Text(kind == .yesNo ? "Check it off when done." :
                  kind == .count ? "This Brick uses whole numbers. Choose a suggestion or enter your own unit." :
-                 "Use a whole number or a decimal, like 20 pages or 2.5 miles. No automatic daily reset.")
+                 "Use a whole number or a decimal, like 20 pages or 2.5 miles.")
         }
     }
 }

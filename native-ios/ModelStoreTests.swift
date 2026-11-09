@@ -70,14 +70,16 @@ final class ModelStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testDemoPlanAndCorruptDataProtection() throws {
+    func testStarterPlanAndCorruptDataProtection() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: folder) }
         let file = folder.appendingPathComponent("builds.json")
         let store = BuildStore(fileURL: file)
-        let drafts = DemoPlanner.suggest(goal: "Read more books")
+        let drafts = PlanGenerator.starter(goal: "Read more books", details: "10 minutes on Monday, Wednesday and Friday")
         XCTAssertEqual(drafts.count, 2)
         XCTAssertTrue(drafts.allSatisfy { $0.valid })
+        XCTAssertEqual(drafts[1].bricks[0].brick.target, 10)
+        XCTAssertEqual(drafts[1].bricks[0].brick.repeatDays, [.monday, .wednesday, .friday])
         XCTAssertTrue(store.builds.isEmpty) // Preview is not a save.
         let plan = Build(id: UUID(), title: "Reading", motivation: "Read more books", createdAt: Date(), walls: drafts.map {
             Wall(id: UUID(), title: $0.title, createdAt: Date(), bricks: $0.bricks.map { $0.brick })
@@ -90,5 +92,39 @@ final class ModelStoreTests: XCTestCase {
         XCTAssertNotNil(broken.loadError)
         XCTAssertThrowsError(try broken.savePlan(plan))
         XCTAssertEqual(try Data(contentsOf: file), corrupt)
+    }
+
+    @MainActor
+    func testRecurringBricksKeepSeparateDaysAndRejectOffDays() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("builds.json")
+        let store = BuildStore(fileURL: file)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let monday = calendar.date(from: DateComponents(year: 2026, month: 11, day: 9, hour: 12))!
+        let tuesday = calendar.date(byAdding: .day, value: 1, to: monday)!
+        let wednesday = calendar.date(byAdding: .day, value: 2, to: monday)!
+        let nextMonday = calendar.date(byAdding: .day, value: 7, to: monday)!
+        try store.create(title: "Read regularly", motivation: "")
+        let b = store.builds[0].id
+        try store.createWall(buildID: b, title: "Practice")
+        let w = store.builds[0].walls[0].id
+        try store.createBrick(buildID: b, wallID: w, title: "Read", kind: .amount, target: 10, unit: "minutes", repeatDays: [.monday, .wednesday])
+        try store.createBrick(buildID: b, wallID: w, title: "Journal", repeatDays: [.monday, .wednesday])
+        let bricks = store.builds[0].walls[0].bricks
+        let r = bricks[0].id, j = bricks[1].id
+        XCTAssertThrowsError(try store.recordProgress(buildID: b, wallID: w, brickID: r, value: 5, on: tuesday, calendar: calendar))
+        XCTAssertThrowsError(try store.toggleBrick(buildID: b, wallID: w, brickID: j, on: tuesday, calendar: calendar))
+        try store.recordProgress(buildID: b, wallID: w, brickID: r, value: 10, on: monday, calendar: calendar)
+        try store.recordProgress(buildID: b, wallID: w, brickID: r, value: 4, on: wednesday, calendar: calendar)
+        try store.toggleBrick(buildID: b, wallID: w, brickID: j, on: monday, calendar: calendar)
+        let saved = BuildStore(fileURL: file).builds[0].walls[0].bricks
+        XCTAssertTrue(saved[0].occurrence(on: monday, calendar: calendar).isComplete)
+        XCTAssertEqual(saved[0].occurrence(on: wednesday, calendar: calendar).progress, 4)
+        XCTAssertFalse(saved[0].occurrence(on: wednesday, calendar: calendar).isComplete)
+        XCTAssertEqual(saved[0].occurrence(on: nextMonday, calendar: calendar).progress, 0)
+        XCTAssertTrue(saved[1].occurrence(on: monday, calendar: calendar).isComplete)
+        XCTAssertFalse(saved[1].occurrence(on: wednesday, calendar: calendar).isComplete)
     }
 }

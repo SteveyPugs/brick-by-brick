@@ -5,10 +5,11 @@ struct WallDetailView: View {
     let buildID: UUID
     let wallID: UUID
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.brickToday) private var today
     @State private var showingCreate = false
     @State private var showingRename = false
     @State private var brickToRename: Brick?
-    @State private var brickToMeasure: Brick?
+    @State private var brickToMeasure: ProgressSelection?
     @State private var confirmingDelete = false
     @State private var brickToDelete: Brick?
     @State private var showingError = false
@@ -19,29 +20,36 @@ struct WallDetailView: View {
     var body: some View {
         List {
           if let wall = wall {
+            let due = Brick.dueBricks(wall.bricks, on: today)
             Section { Text(wall.title).font(.title2.bold()) }
             Section("Bricks") {
                 if wall.bricks.isEmpty {
                     Text("Add a small action you can check off or track toward a target.")
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("\(wall.bricks.filter { $0.isComplete }.count) of \(wall.bricks.count) complete")
+                    Text(due.isEmpty ? "No Bricks scheduled today" :
+                         "\(due.filter { $0.isComplete }.count) of \(due.count) complete" +
+                         (wall.bricks.contains { !$0.repeatDays.isEmpty } ? " today" : ""))
                         .foregroundStyle(.secondary)
                         .accessibilityIdentifier("brick-progress")
                 }
-                ForEach(wall.bricks) { brick in
+                ForEach(wall.bricks) { saved in
+                    let brick = saved.occurrence(on: today)
+                    let scheduled = brick.isDue(on: today)
                     HStack(spacing: 8) {
                         Button {
                             if brick.kind == .yesNo {
                                 do { try store.toggleBrick(buildID: buildID, wallID: wallID, brickID: brick.id) }
                                 catch { showingError = true }
-                            } else { brickToMeasure = brick }
+                            } else { brickToMeasure = ProgressSelection(brick: brick, date: today) }
                         } label: {
-                            BrickRowContent(brick: brick)
+                            BrickRowContent(brick: brick, scheduled: scheduled)
                         }
                         .buttonStyle(.borderless)
+                        .disabled(!scheduled)
                         .accessibilityLabel(brick.title)
-                        .accessibilityValue(brick.kind == .yesNo ? (brick.isComplete ? "Complete" : "Incomplete") : brick.progressLabel)
+                        .accessibilityValue(!scheduled ? "Not scheduled today" :
+                            brick.kind == .yesNo ? (brick.isComplete ? "Complete" : "Incomplete") : brick.progressLabel)
                         .accessibilityHint(brick.kind == .yesNo ? "Changes completion" : "Opens progress editor")
                         Menu {
                             Button("Rename", systemImage: "pencil") { brickToRename = brick }
@@ -80,9 +88,9 @@ struct WallDetailView: View {
                 try store.rename(buildID: buildID, wallID: wallID, brickID: brick.id, title: $0)
             }
         }
-        .sheet(item: $brickToMeasure) { brick in
-            ProgressEditor(brick: brick) {
-                try store.recordProgress(buildID: buildID, wallID: wallID, brickID: brick.id, value: $0)
+        .sheet(item: $brickToMeasure) { selection in
+            ProgressEditor(brick: selection.brick) {
+                try store.recordProgress(buildID: buildID, wallID: wallID, brickID: selection.id, value: $0, on: selection.date)
             }
         }
         .sheet(isPresented: $showingCreate) {
@@ -111,8 +119,15 @@ struct WallDetailView: View {
     }
 }
 
+private struct ProgressSelection: Identifiable {
+    let brick: Brick
+    let date: Date
+    var id: UUID { brick.id }
+}
+
 private struct BrickRowContent: View {
     let brick: Brick
+    let scheduled: Bool
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
@@ -124,7 +139,9 @@ private struct BrickRowContent: View {
                 .background(BrickStyle.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
             VStack(alignment: .leading, spacing: 5) {
                 Text(brick.title).font(.body.weight(.semibold)).foregroundStyle(.primary)
-                if brick.kind != .yesNo {
+                if !scheduled {
+                    Text("Not scheduled today").font(.caption).foregroundStyle(.secondary)
+                } else if brick.kind != .yesNo {
                     Text("\(brick.progress.formatted()) / \(brick.target.formatted()) \(brick.unit)")
                         .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                     if brick.target > 0 {
@@ -132,6 +149,10 @@ private struct BrickRowContent: View {
                     }
                 } else {
                     Text(brick.isComplete ? "Done" : "Tap to check off")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                if !brick.repeatDays.isEmpty {
+                    Label(brick.repeatLabel, systemImage: "repeat")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }

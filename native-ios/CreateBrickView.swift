@@ -9,6 +9,7 @@ struct CreateBrickView: View {
     @State private var kind: BrickKind = .yesNo
     @State private var target = "1"
     @State private var unit = ""
+    @State private var repeatDays: Set<BrickWeekday> = []
     @State private var showingError = false
     @FocusState private var titleFocused: Bool
     private var cleanTitle: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -25,6 +26,7 @@ struct CreateBrickView: View {
                 } header: { Text("Name your Brick") }
                   footer: { Text(cleanTitle.count > 80 ? "Keep your name to 80 characters or fewer." : "Choose one small action you can complete.") }
                 MeasurementFields(kind: $kind, target: $target, unit: $unit)
+                RepeatFields(days: $repeatDays)
             }
             .navigationTitle("Add a Brick")
             .navigationBarTitleDisplayMode(.inline)
@@ -33,7 +35,8 @@ struct CreateBrickView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create") {
                         do { try store.createBrick(buildID: buildID, wallID: wallID, title: title,
-                                                  kind: kind, target: NumberInput.parse(target) ?? 1, unit: unit); dismiss() }
+                                                  kind: kind, target: NumberInput.parse(target) ?? 1, unit: unit,
+                                                  repeatDays: repeatDays); dismiss() }
                         catch { showingError = true }
                     }
                     .disabled(cleanTitle.isEmpty || cleanTitle.count > 80 || !NumberInput.validTarget(kind: kind, target: target, unit: unit))

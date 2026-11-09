@@ -52,20 +52,27 @@ final class BuildStore: ObservableObject {
         try persist(updated)
     }
 
-    func createBrick(buildID: UUID, wallID: UUID, title: String, kind: BrickKind = .yesNo, target: Double = 1, unit: String = "") throws {
+    func createBrick(buildID: UUID, wallID: UUID, title: String, kind: BrickKind = .yesNo, target: Double = 1, unit: String = "", repeatDays: Set<BrickWeekday> = []) throws {
         let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty, clean.count <= 80 else { throw SaveError.invalidTitle }
         try validateMeasurement(kind: kind, target: target, unit: unit)
         try updateWall(buildID: buildID, wallID: wallID) { wall in
-            wall.bricks.append(Brick(title: clean, kind: kind, target: target, unit: unit.trimmingCharacters(in: .whitespacesAndNewlines)))
+            wall.bricks.append(Brick(title: clean, kind: kind, target: target, unit: unit.trimmingCharacters(in: .whitespacesAndNewlines), repeatDays: repeatDays))
         }
     }
 
-    func toggleBrick(buildID: UUID, wallID: UUID, brickID: UUID) throws {
+    func toggleBrick(buildID: UUID, wallID: UUID, brickID: UUID, on date: Date = .now,
+                     calendar: Calendar = BrickWeekday.localCalendar()) throws {
         try updateWall(buildID: buildID, wallID: wallID) { wall in
             guard let index = wall.bricks.firstIndex(where: { $0.id == brickID }) else { throw SaveError.unavailable }
             guard wall.bricks[index].kind == .yesNo else { throw SaveError.unavailable }
-            wall.bricks[index].isComplete.toggle()
+            guard wall.bricks[index].isDue(on: date, calendar: calendar) else { throw SaveError.unavailable }
+            if wall.bricks[index].repeatDays.isEmpty {
+                wall.bricks[index].isComplete.toggle()
+            } else {
+                let complete = wall.bricks[index].occurrence(on: date, calendar: calendar).isComplete
+                wall.bricks[index].setOccurrence(complete ? 0 : 1, on: date, calendar: calendar)
+            }
         }
     }
 
@@ -101,14 +108,20 @@ final class BuildStore: ObservableObject {
         try persist(updated)
     }
 
-    func recordProgress(buildID: UUID, wallID: UUID, brickID: UUID, value: Double) throws {
+    func recordProgress(buildID: UUID, wallID: UUID, brickID: UUID, value: Double,
+                        on date: Date = .now, calendar: Calendar = BrickWeekday.localCalendar()) throws {
         try updateWall(buildID: buildID, wallID: wallID) { wall in
             guard let r = wall.bricks.firstIndex(where: { $0.id == brickID }) else { throw SaveError.unavailable }
             let kind = wall.bricks[r].kind
             guard kind != .yesNo, value.isFinite, value >= 0, value <= 1_000_000_000,
                   kind != .count || value.rounded() == value else { throw SaveError.invalidTitle }
-            wall.bricks[r].progress = value
-            wall.bricks[r].isComplete = value >= wall.bricks[r].target
+            guard wall.bricks[r].isDue(on: date, calendar: calendar) else { throw SaveError.unavailable }
+            if wall.bricks[r].repeatDays.isEmpty {
+                wall.bricks[r].progress = value
+                wall.bricks[r].isComplete = value >= wall.bricks[r].target
+            } else {
+                wall.bricks[r].setOccurrence(value, on: date, calendar: calendar)
+            }
         }
     }
 
