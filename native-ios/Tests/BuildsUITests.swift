@@ -201,12 +201,18 @@ final class BuildsUITests: XCTestCase {
         XCTAssertFalse(brick.exists)
         // Leave a child in the Wall to exercise cascading deletion.
         app.buttons["add-brick"].tap()
-        app.textFields["brick-name"].typeText("Temporary action")
+        let temporaryName = app.textFields["brick-name"]
+        XCTAssertTrue(temporaryName.waitForExistence(timeout: 5))
+        temporaryName.tap()
+        temporaryName.typeText("Temporary action")
+        XCTAssertEqual(temporaryName.value as? String, "Temporary action")
         saveBrick.tap()
+        let temporaryBrick = app.buttons["Temporary action"]
+        XCTAssertTrue(temporaryBrick.waitForExistence(timeout: 5))
         app.buttons["delete-wall"].tap()
         XCTAssertTrue(app.alerts["Delete this Wall?"].waitForExistence(timeout: 5))
         app.alerts.buttons["Cancel"].tap()
-        XCTAssertTrue(app.buttons["Temporary action"].exists)
+        XCTAssertTrue(temporaryBrick.waitForExistence(timeout: 5))
         app.buttons["delete-wall"].tap()
         app.alerts.buttons["Delete Wall"].tap()
         XCTAssertTrue(app.navigationBars["Your Build"].waitForExistence(timeout: 5))
