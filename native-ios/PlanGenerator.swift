@@ -63,10 +63,11 @@ enum PlanGenerator {
         }
         let combined = "\(goal) \(details)".lowercased()
         let tokens = Set(combined.split { !$0.isLetter }.map(String.init))
-        let calendar = Calendar(identifier: .gregorian)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = Locale(identifier: "en_US_POSIX")
         let daily = combined.contains("every day") || combined.contains("daily")
         let days = Set(daily ? BrickWeekday.allCases : BrickWeekday.allCases.filter {
-            tokens.contains(calendar.weekdaySymbols[$0.rawValue - 1].lowercased()) ||
+            tokens.contains(String(describing: $0)) ||
             tokens.contains(calendar.shortWeekdaySymbols[$0.rawValue - 1].lowercased())
         })
         let measurement = explicitMeasurement(in: details) ?? explicitMeasurement(in: goal)
