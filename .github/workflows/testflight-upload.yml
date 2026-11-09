@@ -1,5 +1,5 @@
 name: Upload to TestFlight (approval required)
-# Brick tracking refresh: simpler creation, suggested units, and updated screens.
+# Build planner release: on-device drafts and weekday Brick schedules.
 
 on:
   push:
