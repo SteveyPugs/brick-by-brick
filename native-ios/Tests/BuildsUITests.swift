@@ -82,7 +82,7 @@ final class BuildsUITests: XCTestCase {
         replace(app.textFields["plan-title"], with: "My reading plan")
         app.staticTexts["Choose a book"].tap()
         replace(app.textFields["plan-brick-name"], with: "Pick my next book")
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.navigationBars["Edit suggestion"].buttons.element(boundBy: 0).tap()
         app.swipeUp()
         app.buttons["save-plan"].tap()
         XCTAssertTrue(app.staticTexts["My reading plan"].waitForExistence(timeout: 5))
