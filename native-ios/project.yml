@@ -9,6 +9,16 @@ targets:
     platform: iOS
     sources:
       - BrickByBrickApp.swift
+      - Models.swift
+      - BuildStore.swift
+      - BuildsView.swift
+      - CreateBuildView.swift
+      - BuildDetailView.swift
+      - CreateWallView.swift
+      - WallDetailView.swift
+      - CreateBrickView.swift
+      - SharedViews.swift
+      - PlannerView.swift
       - Assets.xcassets
     settings:
       base:
@@ -29,6 +39,17 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+  BrickByBrickModelTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - ModelStoreTests.swift
+    dependencies:
+      - target: BrickByBrick
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.0"
   BrickByBrickUITests:
     type: bundle.ui-testing
     platform: iOS
@@ -47,4 +68,5 @@ schemes:
         BrickByBrick: all
     test:
       targets:
+        - BrickByBrickModelTests
         - BrickByBrickUITests
