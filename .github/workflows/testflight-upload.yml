@@ -1,9 +1,9 @@
 name: Upload to TestFlight (approval required)
-# Guided Goals release: connected on-device conversations and sequential bricks.
+# Cloud coach: private TestFlight trial.
 
 on:
   push:
-    branches: [native-ios/cloud-build-proof]
+    branches: [native-ios/cloud-coach]
     paths: [.github/workflows/testflight-upload.yml]
   workflow_dispatch:
 
@@ -17,7 +17,7 @@ concurrency:
 jobs:
   upload:
     name: Build and upload to Apple TestFlight
-    if: github.ref == 'refs/heads/native-ios/cloud-build-proof'
+    if: github.ref == 'refs/heads/native-ios/cloud-coach'
     environment: testflight
     runs-on: macos-15
     timeout-minutes: 40
