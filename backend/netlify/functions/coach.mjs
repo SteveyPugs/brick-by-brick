@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { getDatabase } from '@netlify/database';
+import { neon } from '@neondatabase/serverless';
 import { instructions, schema, planSchema, validatePlan, validateInput, validateReply } from '../../src/coach.mjs';
 
 const json = (body,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store'}});
@@ -44,4 +44,4 @@ return async function handler(req, context) {
   } catch { return json({error:'response_unavailable'},503); }
 };
 }
-export default createHandler({env:name=>Netlify.env.get(name),database:()=>getDatabase(),providerFetch:(...args)=>fetch(...args)});
+export default createHandler({env:name=>Netlify.env.get(name),database:()=>({sql:neon(Netlify.env.get('BBB_DATABASE_URL'),{fetchOptions:{signal:AbortSignal.timeout(8000)}})}),providerFetch:(...args)=>fetch(...args)});
