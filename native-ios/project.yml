@@ -60,6 +60,7 @@ targets:
     platform: iOS
     sources:
       - Tests
+      - GuidedGoalsUITests.swift
     dependencies:
       - target: BrickByBrick
     settings:

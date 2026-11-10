@@ -18,8 +18,9 @@ struct GuidedGoalsView: View {
     @State private var title = ""
     @State private var error: String?
     @State private var showArchive = false
+    @State private var path: [UUID] = []
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     Text("A goal. A path. Your next step.").font(.title.bold())
@@ -35,9 +36,7 @@ struct GuidedGoalsView: View {
                         Label("Start a guided goal", systemImage: "plus").frame(maxWidth: .infinity).padding(8)
                     }.buttonStyle(.borderedProminent).disabled(store.loadError != nil)
                     ForEach(store.goals.filter { $0.archived == showArchive }) { goal in
-                        NavigationLink {
-                            GuidedGoalDetail(store: store, goalID: goal.id)
-                        } label: {
+                        NavigationLink(value: goal.id) {
                             VStack(alignment: .leading, spacing: 10) {
                                 Text(goal.title).font(.headline).foregroundStyle(.primary)
                                 Text(goal.approved ? "\(goal.bricks.filter(\.completed).count) of \(goal.bricks.count) bricks complete" : "Let’s shape your path")
@@ -56,16 +55,18 @@ struct GuidedGoalsView: View {
                 }.padding(24)
             }
             .background(GuideStyle.background).navigationTitle("Guided Goals")
+            .navigationDestination(for: UUID.self) { id in GuidedGoalDetail(store: store, goalID: id) }
             .sheet(isPresented: $creating) {
                 NavigationStack {
                     Form {
                         Section("What would you like to work toward?") {
                             TextField("A goal in your own words", text: $title, axis: .vertical).lineLimit(3...6)
+                                .accessibilityIdentifier("guided-goal-title")
                             Text("Learning, a personal project, meal prep, or staying on track. Start with what matters to you.").font(.caption)
                         }
                         if let error = error { Text(error).foregroundStyle(.red) }
                         Button("Start the conversation") {
-                            do { try store.create(title); title = ""; error = nil; creating = false }
+                            do { let id = try store.create(title); title = ""; error = nil; creating = false; path.append(id) }
                             catch { self.error = error.localizedDescription }
                         }.disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || title.count > 300)
                     }.navigationTitle("Your goal")
