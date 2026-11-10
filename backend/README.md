@@ -5,11 +5,17 @@ No OpenAI secret or shared trial token is included in the repository or app.
 
 ## Deployment gates
 
-1. Verify Netlify Database is included in the chosen team plan, without upgrading.
+1. Keep the existing Netlify Legacy Free plan. Create a separate Neon Free project.
+   Run the SQL in `netlify/database/migrations/20261110010000_usage.sql` once
+   in that project's production SQL Editor. Do not reset an existing counter.
+   This SQL file is a setup reference; Netlify does not provision our database.
 2. Use branch `native-ios/cloud-coach`, base directory `backend`, build command
    `npm test`, publish directory `public`, functions directory `netlify/functions`.
    These paths are relative to the base. Do not deploy the repository root.
-3. Deploy with AI disabled; verify migration and unauthenticated/disabled behavior.
+3. Deploy with AI disabled; verify the Neon table and disabled behavior.
+   Set production-only Functions-scoped `BBB_DATABASE_URL` to the Neon pooled
+   connection string. It contains a password: never share it in chat or commits.
+   The serverless driver connects over HTTPS. Missing/unavailable databases fail closed.
 4. In Netlify, add production-only Functions-scoped `BBB_OPENAI_API_KEY` and a
    separate cryptographically random `BBB_TRIAL_TOKEN` (at least 32 characters).
    Do not put secrets in commits, build logs, or chat. Do not use AI Gateway keys.
