@@ -1,5 +1,5 @@
 name: Upload to TestFlight (approval required)
-# Build planner release: on-device drafts and weekday Brick schedules.
+# Guided Goals release: connected on-device conversations and sequential bricks.
 
 on:
   push:
