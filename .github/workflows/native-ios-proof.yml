@@ -2,7 +2,7 @@ name: Native iPhone build proof
 
 on:
   push:
-    branches: [native-ios/cloud-build-proof]
+    branches: [native-ios/cloud-build-proof, native-ios/guided-goals]
     paths: ['native-ios/**', '.github/workflows/native-ios-proof.yml']
   workflow_dispatch:
 
@@ -12,6 +12,8 @@ permissions:
 jobs:
   build-and-launch:
     runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4

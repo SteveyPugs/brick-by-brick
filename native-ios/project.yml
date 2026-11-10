@@ -20,6 +20,9 @@ targets:
       - SharedViews.swift
       - PlannerView.swift
       - PlanGenerator.swift
+      - GuidedGoalStore.swift
+      - GuidedGoalAI.swift
+      - GuidedGoalViews.swift
       - Assets.xcassets
     settings:
       base:
@@ -45,6 +48,7 @@ targets:
     platform: iOS
     sources:
       - ModelStoreTests.swift
+      - GuidedGoalTests.swift
     dependencies:
       - target: BrickByBrick
     settings:
@@ -56,6 +60,7 @@ targets:
     platform: iOS
     sources:
       - Tests
+      - GuidedGoalsUITests.swift
     dependencies:
       - target: BrickByBrick
     settings:
