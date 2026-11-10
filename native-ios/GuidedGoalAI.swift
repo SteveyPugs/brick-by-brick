@@ -13,8 +13,13 @@ enum GuidedGoalAI {
             }
         }
     }
-    struct Reply { var text: String; var memory: String }
-    static var available: Bool { PlanGenerator.isAvailable }
+    struct Reply {
+        var text: String
+        var memory: String
+        var status: String = "continue"
+        var outcome: String = ""
+    }
+    static var available: Bool { CloudCoach.enabled || PlanGenerator.isAvailable }
     private static let instructions = """
         You are a supportive goal guide in Brick by Brick. Help with learning, everyday projects,
         meal planning, and general wellness habits. Use plain language and one question at a time.
@@ -28,6 +33,8 @@ enum GuidedGoalAI {
         You have no web access: acknowledge uncertainty about current exams, prices or facts.
         Do not claim you scheduled reminders, bought anything, or took actions outside this chat.
         Preserve the user's constraints in memory, with decisions and unresolved questions.
+        When the user agrees to your proposed next step, perform that step instead of asking
+        whether they are ready again. Agreement alone is not proof of learning or completed work.
         """
     private static func tail(_ messages: [GoalMessage]) -> String {
         messages.suffix(6).map { "\($0.isUser ? "User" : "Guide"): \($0.text.prefix(600))" }.joined(separator: "\n")
@@ -42,6 +49,10 @@ enum GuidedGoalAI {
         return value
     }
     static func reply(goal: GuidedGoal, brick: GoalBrick?) async throws -> Reply {
+        if CloudCoach.enabled {
+            let value = try await CloudCoach.request(CloudCoach.Reply.self, goal: goal, brick: brick, mode: brick == nil ? "discovery" : "brick")
+            return Reply(text: value.reply, memory: value.memory, status: value.status, outcome: value.outcome)
+        }
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *), available {
             let mode = brick == nil
@@ -52,12 +63,19 @@ enum GuidedGoalAI {
             try Task.checkCancellation()
             let text = response.reply.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { throw AIError.invalid }
-            return Reply(text: String(text.prefix(2400)), memory: String(response.memory.prefix(1200)))
+            return Reply(text: String(text.prefix(2400)), memory: String(response.memory.prefix(1200)),
+                         status: brick == nil ? "continue" : response.status,
+                         outcome: String(response.outcome.prefix(1200)))
         }
         #endif
         throw AIError.unavailable
     }
     static func plan(goal: GuidedGoal) async throws -> [GoalBrick] {
+        if CloudCoach.enabled {
+            let value = try await CloudCoach.request(CloudCoach.Plan.self, goal: goal, brick: nil, mode: "plan")
+            guard (3...5).contains(value.bricks.count) else { throw AIError.invalid }
+            return value.bricks.map { GoalBrick(title: $0.title, purpose: $0.purpose, finish: $0.finish) }
+        }
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *), available {
             let session = LanguageModelSession(instructions: instructions + """
@@ -89,6 +107,8 @@ enum GuidedGoalAI {
 private struct GuidedReplyPayload {
     @Guide(description: "A helpful reply under 120 words; ask at most one question.") var reply: String
     @Guide(description: "Updated compact notes, at most 150 words. Preserve known facts, preferences, decisions and unresolved issues from prior notes and recent messages. Never invent user facts.") var memory: String
+    @Guide(description: "Use continue for ongoing work, awaiting_action for an action outside chat, or ready_to_wrap ONLY when the user has demonstrated the finish criterion. Saying yes or sure is not completion.") var status: String
+    @Guide(description: "Actual demonstrated outcome when ready_to_wrap, otherwise empty. Never invent completed actions.") var outcome: String
 }
 @available(iOS 26.0, *)
 @Generable

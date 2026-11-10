@@ -16,6 +16,14 @@ struct GoalBrick: Codable, Identifiable, Equatable {
     var memory = ""
     var outcome = ""
     var completed = false
+    // Optional fields preserve decoding of goals created by earlier builds.
+    var readiness: String? = nil
+    var proposedOutcome: String? = nil
+    var canReviewCompletion: Bool {
+        !completed && readiness == "ready_to_wrap" &&
+        !(proposedOutcome ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        messages.last?.isUser == false
+    }
 }
 
 struct GuidedGoal: Codable, Identifiable, Equatable {
