@@ -19,6 +19,8 @@ struct GuidedGoalsView: View {
     @State private var error: String?
     @State private var showArchive = false
     @State private var path: [UUID] = []
+    @State private var cloudSettings = false
+    @AppStorage("cloudCoachConsent") private var cloudEnabled = false
     var body: some View {
         NavigationStack(path: $path) {
             ScrollView {
@@ -50,11 +52,13 @@ struct GuidedGoalsView: View {
                             .foregroundStyle(.secondary).padding(.vertical, 24)
                     }
                     Toggle("Show archived goals", isOn: $showArchive).font(.callout)
-                    Text("On-device AI • No account required\nAI can make mistakes. You approve the plan and decide when each brick is complete.")
+                    Button("Cloud AI settings") { cloudSettings = true }
+                    Text(cloudEnabled ? "Cloud AI • Conversation context is sent to OpenAI through your backend. You approve outcomes." : "On-device AI • No account required. You approve outcomes.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }.padding(24)
             }
             .background(GuideStyle.background).navigationTitle("Guided Goals")
+            .sheet(isPresented: $cloudSettings) { CloudCoachSettings() }
             .navigationDestination(for: UUID.self) { id in GuidedGoalDetail(store: store, goalID: id) }
             .sheet(isPresented: $creating) {
                 NavigationStack {
@@ -214,7 +218,7 @@ private struct GuidedGoalSession: View {
                         Button("Start this conversation") { runReply() }.buttonStyle(.borderedProminent).disabled(busy)
                     }
                     if busy {
-                        HStack { ProgressView(); Text("Thinking on your iPhone…"); Spacer(); Button("Cancel") { work?.cancel() } }
+                        HStack { ProgressView(); Text(CloudCoach.enabled ? "Your guide is thinking…" : "Thinking on your iPhone…"); Spacer(); Button("Cancel") { work?.cancel() } }
                     }
                     if let error = error {
                         Text(error).foregroundStyle(.orange)
@@ -242,13 +246,15 @@ private struct GuidedGoalSession: View {
                             .buttonStyle(.bordered)
                             .disabled(busy || !goal.discovery.contains(where: \.isUser) || pendingReply)
                         Button("Edit goal wording") { editedTitle = goal.title; editingTitle = true }.disabled(busy)
-                    } else if let brick = brick, !brick.completed, messages.contains(where: \.isUser) {
-                        Button("Review & complete this brick") {
-                            outcome = brick.memory.isEmpty ? "" : String(brick.memory.prefix(1200))
+                    } else if let brick = brick, brick.canReviewCompletion {
+                        Text("Your outcome is ready to review. Keep chatting if you want to change anything.")
+                            .font(.callout).foregroundStyle(.secondary)
+                        Button("Review this outcome") {
+                            outcome = brick.proposedOutcome ?? ""
                             completing = true
                         }.buttonStyle(.borderedProminent).disabled(busy || pendingReply)
                     }
-                    Text("On-device AI can make mistakes. No web browsing or external actions. Full chats stay saved; compact notes and recent messages carry into each response.")
+                    Text(CloudCoach.enabled ? "Cloud AI can make mistakes. This conversation and relevant goal context are sent through your backend to OpenAI. No web browsing or external actions." : "On-device AI can make mistakes. No web browsing or external actions. Full chats stay saved; compact notes and recent messages carry into each response.")
                         .font(.caption).foregroundStyle(.secondary)
                     Color.clear.frame(height: 1).id("bottom")
                 }.padding(24)
@@ -334,6 +340,8 @@ private struct GuidedGoalSession: View {
                     let message = GoalMessage(isUser: false, text: reply.text)
                     if let brickID = brickID, let i = goal.bricks.firstIndex(where: { $0.id == brickID }) {
                         goal.bricks[i].messages.append(message); goal.bricks[i].memory = reply.memory
+                        goal.bricks[i].readiness = reply.status
+                        goal.bricks[i].proposedOutcome = reply.outcome
                     } else if brickID == nil { goal.discovery.append(message); goal.memory = reply.memory }
                 }
             } catch {

@@ -22,6 +22,7 @@ targets:
       - PlanGenerator.swift
       - GuidedGoalStore.swift
       - GuidedGoalAI.swift
+      - CloudCoach.swift
       - GuidedGoalViews.swift
       - Assets.xcassets
     settings:
