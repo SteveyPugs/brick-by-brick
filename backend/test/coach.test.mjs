@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {validateInput,validateReply} from '../src/coach.mjs';
+const input=()=>({mode:'brick',goal:'Learn GCP',context:'Teach storage',messages:[{role:'user',content:'Sure'}]});
+test('keeps full messages, including early decisions',()=>{const x=input();x.messages.unshift({role:'user',content:'x'.repeat(2000)});assert.equal(validateInput(x).messages[0].content.length,2000)});
+test('rejects injected system roles',()=>{const x=input();x.messages[0].role='system';assert.throws(()=>validateInput(x))});
+test('rejects oversized context rather than silently truncating',()=>{const x=input();x.context='x'.repeat(8001);assert.throws(()=>validateInput(x))});
+test('rejects missing latest user turn',()=>{const x=input();x.messages[0].role='assistant';assert.throws(()=>validateInput(x))});
+test('discovery never signals completion',()=>assert.equal(validateReply({reply:'Hello',memory:'',status:'ready_to_wrap',outcome:''},'discovery').status,'continue'));
+test('wrap-up requires an outcome',()=>assert.throws(()=>validateReply({reply:'Done',memory:'',status:'ready_to_wrap',outcome:''},'brick')));
+test('real-world waiting is distinct from completion',()=>assert.equal(validateReply({reply:'Try it',memory:'',status:'awaiting_action',outcome:''},'brick').status,'awaiting_action'));
